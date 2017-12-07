@@ -26,6 +26,12 @@ def clean_happy_file(file):
                     t_value = t[f.index(i)]
                     q_value = q[f.index(i)]
 
+                    if isFloat(t_value):
+                        t_value = float(t_value)
+
+                    if isFloat(q_value):
+                        q_value = float(q_value)
+
                     if t_value == ".":
                         t_value = None
                     if q_value == ".":
@@ -54,6 +60,7 @@ def clean_happy_file(file):
         return df
 
 
+
 TVC_FORMAT = ["GT", "GQ", "DP", "RO", "AO", "SRF", "SRR", "SAF", "SAR", "FDP", "FRO", "FAO",
               "AF", "FSRF", "FSRR", "FSAF", "FSAR"]
 
@@ -62,6 +69,11 @@ TVC_INFO = ["NS", "HS", "DP", "RO", "AO", "SRF", "SRR", "SAF", "SAR", "FDP", "FR
  "SSSB", "SSEN", "SSEP", "STB", "STBP", "PB", "PBP", "MLLD", "OID", "OPOS", "OREF", "OALT", "OMAPALT"]
 
 TVC_ORIGINAL = ["CHROM", "POS", "ID", "REF", "ALT",	"QUAL",	"FILTER", "INFO", "FORMAT",	"3140_3"]
+
+
+
+
+
 
 def get_TVC_file(file):
     with open(file, "r") as f:
@@ -124,41 +136,124 @@ def get_TVC_file(file):
 
 
 
-tvc_df = get_TVC_file(TVC_FILE)
-happy_df = clean_happy_file(HAPPY_FILE)
-
-
-print(len(tvc_df))
-print(len(happy_df))
-
-
-
-tvc_df.to_csv("tvc_mod.vcf", sep='\t')
-happy_df.to_csv("happy_mod.vcf", sep='\t')
 
 
 
 
 
 
+# tvc_df = get_TVC_file(TVC_FILE)
+#
+# print(tvc_df)
+
+# happy_df = clean_happy_file(HAPPY_FILE)
+#
+#
+# print(len(tvc_df))
+# print(len(happy_df))
+#
+#
+#
+# tvc_df.to_csv("tvc_mod.vcf", sep='\t')
+# happy_df.to_csv("happy_mod.vcf", sep='\t')
+#
+# m_df = pd.merge(tvc_df, happy_df, how='inner', on=['CHROM', 'POS', 'REF', 'ALT'])
+# d_df = m_df.drop_duplicates()
+#
+#
+# d_df.to_csv("tvc_mod.vcf", sep="\t")
+
+
+def isFloat(value):
+    try:
+        float(value)
+        return True
+    except ValueError:
+        return False
 
 
 
-m_df = pd.merge(tvc_df, happy_df, how='inner', on=['CHROM', 'POS', 'REF', 'ALT'])
+def clean_TVC(file):
+    with open(file, "r") as f:
+        r = csv.DictReader(f, delimiter="\t")
+        l = []
 
-# m_df.to_csv("merged.vcf", sep="\t")
-# print(m_df.columns)
+        for row in r:
+            info = row["INFO"].split(";")
+            format = row["FORMAT"]
+            tvc_3140_3 = row["3140_3"].split(":")
+
+            tis = ["ti_"+ti for ti in TVC_INFO]
+
+            info_dict = dict.fromkeys(tis)
+
+            for i in info:
+                kv = i.split("=")
+                k = kv[0]
+                v = kv[1]
+                if isFloat(v):
+                    v = float(v)
+                else:
+                    if v == '.':
+                        v = None
+
+                info_dict.update({"ti_" + k: v})
+
+            format_dict = {}
+            if format:
+                f = format.split(":")
+                for i in TVC_FORMAT:
+                    if i in f:
+                        index = f.index(i)
+                        k = i
+                        v = tvc_3140_3[index]
+                        if isFloat(v):
+                            v = float(v)
+                        format_dict.update({"tf_" + k: v})
+                    else:
+                        format_dict.update({"tf_" + k: None})
+            else:
+                for i in TVC_FORMAT:
+                    format_dict.update({"tf_" + i: None})
+
+            # print(info_dict)
+            # print(format_dict)
+
+            row.update(info_dict)
+            row.update(format_dict)
+
+            l.append(row)
+
+        df = pd.DataFrame(l)
+
+    # reordering the columns
+    tf = ["tf_" + t for t in TVC_FORMAT]
+    ti = ["ti_" + t for t in TVC_INFO]
+    df = df[TVC_ORIGINAL + tf + ti]
+
+    # info, format and ID will be dropped.
+    df = df.drop(['ID', 'FORMAT', 'INFO', '3140_3'], axis=1)
 
 
-d_df = m_df.drop_duplicates()
+    return df
 
 
 
-d_df.to_csv("tvc_mod.vcf", sep="\t")
+tvc_df = clean_TVC(TVC_FILE)
+# print(tvc_df)
+# tvc_df.to_csv("tvc_mod.vcf", sep="\t")
 
 
+h_df = clean_happy_file(HAPPY_FILE)
+h_df = h_df.drop(['ID', 'QUAL', 'FILTER', 'INFO', 'FORMAT', 'TRUTH', 'QUERY'], axis=1)
+h_df.to_csv("happy_mod.vcf", sep="\t")
 
 
+# print(h_df)
+
+m_df = pd.merge(tvc_df, h_df, how='inner', on=['CHROM', 'POS', 'REF', 'ALT'])
+
+m_df.to_csv("merged.vcf", sep='\t')
 
 
 
